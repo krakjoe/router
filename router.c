@@ -162,19 +162,29 @@ static PHP_METHOD(Router, setConsole) {
 	RETURN_CHAIN();
 } /* }}} */
 
-static inline void Router_do_route(route_t *route, zval *return_value_ptr TSRMLS_DC) { /* {{{ */
+static inline void Router_do_route(route_t *route, zval *groups, zval *return_value_ptr TSRMLS_DC) { /* {{{ */
 	if (route) {
-		zval *callback_retval_ptr = NULL;
+		zval *callback_retval_ptr = NULL, *callback_args = NULL;
 		zend_fcall_info callback_info;
 		zend_fcall_info_cache callback_cache;
 		char *callback_name, *callback_error;
 
 		if (zend_fcall_info_init(route->callable, 0, &callback_info, &callback_cache, &callback_name, &callback_error TSRMLS_CC) == SUCCESS) {
 			callback_info.retval_ptr_ptr = &callback_retval_ptr;
-		
+			
+			if (groups) {
+				callback_info.params = (zval***) ecalloc(1, sizeof(zval**));
+				callback_info.params[0] = &groups;
+				callback_info.param_count = 1;
+			}
+			
 			if (zend_call_function(&callback_info, &callback_cache TSRMLS_CC) != SUCCESS) {
 				zend_throw_exception(
 					RoutingException, "failed to call selected route", 0 TSRMLS_CC);
+			}
+			
+			if (groups) {
+				efree(callback_info.params);
 			}
 		
 			if (callback_retval_ptr) {
@@ -217,22 +227,27 @@ static PHP_METHOD(Router, route) {
 				if (method_length == Z_STRLEN(route->method)) {
 					if (strncasecmp(method, Z_STRVAL(route->method), method_length) == SUCCESS) {
 						zval zmatch = {0},
-						     zsubs = {0};
+						     *zsubs;
+						
 						pcre_cache_entry *pcre = pcre_get_compiled_regex_cache(Z_STRVAL(route->uri), Z_STRLEN(route->uri) TSRMLS_CC);
 						
 						if (pcre != NULL) {
-							php_pcre_match_impl(
-								pcre, 
-								request_uri, request_uri_length, 
-								&zmatch, &zsubs, 0, 0, 0, 0 TSRMLS_CC);
+							ALLOC_INIT_ZVAL(zsubs);
+							array_init(zsubs);
 							
-							zval_dtor(&zsubs);
+							php_pcre_match_impl(
+								pcre,
+								request_uri, request_uri_length, 
+								&zmatch, zsubs, 0, 0, 0, 0 TSRMLS_CC);
 							
 							if (zend_is_true(&zmatch)) {
-								Router_do_route(route, return_value TSRMLS_CC);
+								Router_do_route(route, zsubs, return_value TSRMLS_CC);
+								zval_ptr_dtor(&zsubs);
 								efree(method);
 								return;
 							}
+							
+							zval_ptr_dtor(&zsubs);
 						} else {
 							zend_throw_exception(
 								RoutingException, "invalid route found", 0 TSRMLS_CC);
@@ -245,7 +260,7 @@ static PHP_METHOD(Router, route) {
 		} else {
 			if (router->console) {
 				if (zend_hash_find(&router->routes, Console_Route, Console_Route_Size, (void**)&route) == SUCCESS) {
-					Router_do_route(route, return_value TSRMLS_CC);
+					Router_do_route(route, NULL, return_value TSRMLS_CC);
 					return;
 				}
 			}

@@ -22,8 +22,15 @@ if (extension_loaded("router")) {
 				printf("You were redirected here ...\n");
 				return true;
 			})
-			->addRoute("get", "~/blog/.*~", function() use (&$router) { 
-				printf("Welcome to the bloggingz :)\n");
+			->addRoute("get", "~/blog/?([a-z]+)?/?([a-z\-]+)?~", function($patterns) use (&$router) { 
+				@list($uri, $action, $article) = $patterns;
+				
+				if ($action) {
+					if ($article) {
+						printf("Welcome to the bloggingz: %s %s :)\n", $action, $article);
+					} else printf("Welcome to the bloggingz: %s :)\n", $action);
+				} else printf("Welcome to the bloggingz :)\n");
+				
 				return true;
 			})
 			->addRoute("get", "~.*~", function(){
