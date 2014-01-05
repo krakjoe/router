@@ -221,20 +221,21 @@ static PHP_METHOD(Router, route) {
 			char *request_uri = SG(request_info).request_uri;
 			size_t request_uri_length = strlen(request_uri);
 			
+			zval *zsubs;
+			
+			ALLOC_INIT_ZVAL(zsubs);
+			array_init(zsubs);
+					
 			for (zend_hash_internal_pointer_reset_ex(&router->routes, &position);
 				zend_hash_get_current_data_ex(&router->routes, (void**) &route, &position) == SUCCESS;
 				zend_hash_move_forward_ex(&router->routes, &position)) {
 				if (method_length == Z_STRLEN(route->method)) {
 					if (strncasecmp(method, Z_STRVAL(route->method), method_length) == SUCCESS) {
-						zval zmatch = {0},
-						     *zsubs;
+						zval zmatch = {0};
 						
 						pcre_cache_entry *pcre = pcre_get_compiled_regex_cache(Z_STRVAL(route->uri), Z_STRLEN(route->uri) TSRMLS_CC);
 						
 						if (pcre != NULL) {
-							ALLOC_INIT_ZVAL(zsubs);
-							array_init(zsubs);
-							
 							php_pcre_match_impl(
 								pcre,
 								request_uri, request_uri_length, 
@@ -247,7 +248,7 @@ static PHP_METHOD(Router, route) {
 								return;
 							}
 							
-							zval_ptr_dtor(&zsubs);
+							zend_hash_clean(Z_ARRVAL_P(zsubs));
 						} else {
 							zend_throw_exception(
 								RoutingException, "invalid route found", 0 TSRMLS_CC);
@@ -256,6 +257,7 @@ static PHP_METHOD(Router, route) {
 				}
 			}
 			
+			zval_ptr_dtor(&zsubs);
 			efree(method);
 		} else {
 			if (router->console) {
