@@ -225,9 +225,9 @@ static PHP_METHOD(Router, route) {
 			size_t request_uri_length = strlen(request_uri);
 			
 			ALLOC_INIT_ZVAL(zsubs);
-			array_init(zsubs)
+			array_init(zsubs);
 
-			for (zend_hash_internal_pointer_reset_ex(&router->routes, &position);
+			for (zend_hash_internal_pointer_reset_ex(&router->routes, &position);	
 				zend_hash_get_current_data_ex(&router->routes, (void**) &route, &position) == SUCCESS;
 				zend_hash_move_forward_ex(&router->routes, &position)) {
 				if ((method_length == Z_STRLEN(route->method)) && 
