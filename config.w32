@@ -1,0 +1,9 @@
+// $Id$
+// vim:ft=javascript
+
+ARG_ENABLE("router", "enable router support", "no");
+
+if (PHP_ROUTER != "no") {
+	EXTENSION("router", "router.c");
+}
+
