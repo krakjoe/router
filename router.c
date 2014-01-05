@@ -212,7 +212,6 @@ static PHP_METHOD(Router, route) {
 	if (zend_hash_num_elements(&router->routes)) {
 		HashPosition position;
 		route_t *route = NULL;
-		zend_bool routed = 0;
 		
 		if (SG(request_info).request_method) {
 			size_t method_length = strlen(SG(request_info).request_method);
