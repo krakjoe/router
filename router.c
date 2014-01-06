@@ -262,7 +262,80 @@ static PHP_METHOD(Router, route) {
 		} else {
 			if (router->console) {
 				if (zend_hash_find(&router->routes, Console_Route, Console_Route_Size, (void**)&route) == SUCCESS) {
-					Router_do_route(route, NULL, return_value TSRMLS_CC);
+					zval *zargv, *zflags, *zoptions, *zargs;
+					
+					MAKE_STD_ZVAL(zargv);
+					MAKE_STD_ZVAL(zflags);
+					MAKE_STD_ZVAL(zoptions);
+					MAKE_STD_ZVAL(zargs);
+					
+					array_init(zargv);
+					array_init(zflags);
+					array_init(zoptions);
+					array_init(zargs);
+					
+					add_assoc_zval(zargv, "flags", zflags);
+					add_assoc_zval(zargv, "options", zoptions);
+					add_assoc_zval(zargv, "args", zargs);
+					
+					if (SG(request_info).argc) {
+						char **argv = SG(request_info).argv;
+						int    argc = SG(request_info).argc;
+						int    arg  = 1;
+						
+						add_assoc_string(zargv, "exec", argv[0], strlen(argv[0]));
+						
+						while (arg < argc) {
+							size_t len = strlen(argv[arg]);
+							
+							switch (argv[arg][0]) {
+								case '-': switch (argv[arg][1]) {
+									case '-': {
+										if (len > 2) {
+											char *option = strdup(&argv[arg][2]);
+											char *value = strstr(option, "=");
+											
+											if (value) {
+												option[value - option] = 0;
+												value++;
+											} else {
+												if (argc > arg+1) {
+													arg++;
+													value = argv[arg];
+												}
+											}
+											
+											if (option && value) {
+												add_assoc_string(
+													zoptions, option, value, strlen(value));
+											}
+											
+											free(option);
+										}
+									} break;
+									
+									default: {
+										if (len > 1) {
+											add_next_index_string(
+												zflags, &argv[arg][1], len-1);
+										}
+									}
+								} break;
+								
+								default: {
+									add_next_index_string(zargs, argv[arg], len);
+								}
+							}
+							arg++;
+						}
+					}
+					
+					Router_do_route(route, zargv, return_value TSRMLS_CC);
+					
+					zval_ptr_dtor(&zargv);
+					zval_ptr_dtor(&zflags);
+					zval_ptr_dtor(&zoptions);
+					zval_ptr_dtor(&zargs);
 					return;
 				}
 			}

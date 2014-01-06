@@ -1,4 +1,4 @@
-router
+Router
 ======
 
 This extension serves to provide a sane, easy router for modern PHP applications:

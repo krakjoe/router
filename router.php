@@ -2,7 +2,17 @@
 if (extension_loaded("router")) {
 
 	class Console {
-		public static function main($argv = array()) {
+		/*
+		* @param config - parsed arguments from command line
+		* 
+		* exec (this script)
+		* flags (-flag)
+		* options (--option=value or --option value)
+		* args (anything else)
+		*/
+		public static function main($config = array()) {
+			var_dump($config);
+			
 			printf(
 				"I am the console program :)\n");
 			return true;
@@ -22,7 +32,7 @@ if (extension_loaded("router")) {
 				printf("You were redirected here ...\n");
 				return true;
 			})
-			->addRoute("get", "~/blog/?([a-z]+)?/?([a-z\-]+)?~", function($patterns) use (&$router) { 
+			->addRoute("get", "~^/blog/?([a-z]+)?/?([a-z\-]+)?~", function($patterns) use (&$router) { 
 				@list($uri, $action, $article) = $patterns;
 				
 				if ($action) {
