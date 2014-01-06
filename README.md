@@ -21,6 +21,12 @@ abstract Router {
 	public function setConsole(Callable callback);
 	
 	/*
+	* The default route is invoked when a web request matches no other route
+	* @param callback - the console program
+	*/
+	public function setDefault(Callable callback);
+	
+	/*
 	* Sends a Location: header and finishes the request
 	* @param location - the location to redirect to
 	* @param code     - the response code for the redirect

@@ -43,7 +43,7 @@ if (extension_loaded("router")) {
 				
 				return true;
 			})
-			->addRoute("get", "~.*~", function(){
+			->setDefault(function(){
 				printf("I am the default route ...\n");
 				return true;
 			})

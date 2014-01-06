@@ -34,24 +34,32 @@
 #define ROUTER_REDIRECT_PERM 301
 #define ROUTER_REDIRECT_TEMP 302
 
+#define ROUTER_ROUTE_NORMAL 0
+#define ROUTER_ROUTE_CONSOLE 1
+#define ROUTER_ROUTE_DEFAULT 2
+
 zend_class_entry *Router;
 zend_class_entry *RoutingException;
 
-typedef struct _router_t {
-	zend_object std;
-	HashTable   routes;
-	zend_bool   console;
-} router_t;
-
 typedef struct _route_t {
-	zend_bool	       console;
+	zend_uchar	       type;
 	zval               method;
 	zval			   uri;
 	zval		      *callable;
 } route_t;
 
-const char *Console_Route = "Console";
+typedef struct _router_t {
+	zend_object std;
+	HashTable   routes;
+	route_t     *console;
+	route_t     *fallback;
+} router_t;
+
+const char *Console_Route = "\0\0$$Console$$\0\0";
 static size_t Console_Route_Size = sizeof(Console_Route)-1;
+
+const char *Default_Route = "\0\0$$Default$$\0\0";
+static size_t Default_Route_Size = sizeof(Default_Route)-1;
 
 /* {{{ */
 ZEND_BEGIN_ARG_INFO_EX(Router_no_args, 0, 0, 0)
@@ -63,7 +71,7 @@ ZEND_BEGIN_ARG_INFO_EX(Router_addRoute, 0, 0, 3)
 	ZEND_ARG_INFO(0, callable)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_INFO_EX(Router_setConsole, 0, 0, 1)
+ZEND_BEGIN_ARG_INFO_EX(Router_setCallable, 0, 0, 1)
 	ZEND_ARG_INFO(0, callable)
 ZEND_END_ARG_INFO()
 
@@ -85,7 +93,8 @@ static PHP_METHOD(Router, __construct) {
 	}
 } /* }}} */
 
-/* {{{ proto Router Router::addRoute(string method, string uri, Callable handler) */
+/* {{{ proto Router Router::addRoute(string method, string uri, Callable handler) 
+	Throws RoutingException on failure */
 static PHP_METHOD(Router, addRoute) {
 	zval *method,
 		 *uri,
@@ -115,6 +124,9 @@ static PHP_METHOD(Router, addRoute) {
 					zend_hash_next_index_insert(
 						&router->routes, (void**) &route, sizeof(route_t), NULL);
 				}
+			} else {
+				zend_throw_exception(
+					RoutingException, "handler is not callable", 0 TSRMLS_CC);
 			}
 
 			if (callable_name) {
@@ -126,7 +138,9 @@ static PHP_METHOD(Router, addRoute) {
 	RETURN_CHAIN();
 } /* }}} */
 
-/* {{{ proto Router Router::setConsole(Callable handler) */
+/* {{{ proto Router Router::setConsole(Callable handler) 
+	Throws RoutingException on failure 
+	The console route is invoked whenever executed from the command line */
 static PHP_METHOD(Router, setConsole) {
 	zval *callable;
 
@@ -148,10 +162,54 @@ static PHP_METHOD(Router, setConsole) {
 				router_t *router = zend_object_store_get_object(getThis() TSRMLS_CC);
 
 				zend_hash_update(
-					&router->routes, Console_Route, Console_Route_Size, (void**)&route, sizeof(route_t), NULL);
-
-				router->console = 1;
+					&router->routes,
+					Console_Route, Console_Route_Size, 
+					(void**)&route, sizeof(route_t), (void**)&router->console);
 			}
+		} else {
+			zend_throw_exception(
+				RoutingException, "handler is not callable", 0 TSRMLS_CC);
+		}
+
+		if (callable_name) {
+			efree(callable_name);
+		}
+	}
+
+	RETURN_CHAIN();
+} /* }}} */
+
+/* {{{ proto Router Router::setDefault(Callable handler) 
+	Throws RoutingException on failure 
+	The default route is invoked for web requests that match no other route */
+static PHP_METHOD(Router, setDefault) {
+	zval *callable;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &callable) != SUCCESS) {
+		return;
+	}
+
+	{
+		char *callable_name = NULL;
+
+		if (zend_is_callable(callable, 0, &callable_name TSRMLS_CC)) {
+			route_t route = {1};
+
+			route.callable = callable;
+
+			Z_ADDREF_P(route.callable);
+
+			{
+				router_t *router = zend_object_store_get_object(getThis() TSRMLS_CC);
+				
+				zend_hash_update(
+					&router->routes, 
+					Default_Route, Default_Route_Size,
+					(void**)&route, sizeof(route_t), (void**)&router->fallback);
+			}
+		} else {
+			zend_throw_exception(
+				RoutingException, "handler is not callable", 0 TSRMLS_CC);
 		}
 
 		if (callable_name) {
@@ -199,12 +257,13 @@ static inline void Router_do_route(route_t *route, zval *groups, zval *return_va
 	}
 } /* }}} */
 
-/* {{{ proto mixed Router::route(void) 
-	returns the result of invoking the selected routes callable 
+/* {{{ proto mixed Router::route(void)
+	returns the result of invoking the first suitable routes handler 
 	Throws RoutingException on failure */
 static PHP_METHOD(Router, route) {
 	router_t *router;
-	
+	route_t *route = NULL;
+			
 	if (zend_parse_parameters_none() != SUCCESS) {
 		return;
 	}
@@ -213,7 +272,6 @@ static PHP_METHOD(Router, route) {
 
 	if (zend_hash_num_elements(&router->routes)) {
 		HashPosition position;
-		route_t *route = NULL;
 
 		if (SG(request_info).request_method) {
 			zval *zsubs;
@@ -230,6 +288,10 @@ static PHP_METHOD(Router, route) {
 			for (zend_hash_internal_pointer_reset_ex(&router->routes, &position);	
 				zend_hash_get_current_data_ex(&router->routes, (void**) &route, &position) == SUCCESS;
 				zend_hash_move_forward_ex(&router->routes, &position)) {
+				
+				if (route->type)
+					continue;
+				
 				if ((method_length == Z_STRLEN(route->method)) && 
 					(strncasecmp(method, Z_STRVAL(route->method), method_length) == SUCCESS)) {
 					zval zmatch = {0};
@@ -259,89 +321,92 @@ static PHP_METHOD(Router, route) {
 
 			zval_ptr_dtor(&zsubs);
 			efree(method);
+			
+			if (router->fallback) {
+				Router_do_route(router->fallback, NULL, return_value TSRMLS_CC);
+				return;
+			}
 		} else {
 			if (router->console) {
-				if (zend_hash_find(&router->routes, Console_Route, Console_Route_Size, (void**)&route) == SUCCESS) {
-					zval *zargv, *zflags, *zoptions, *zargs;
+				zval *zargv, *zflags, *zoptions, *zargs;
 					
-					MAKE_STD_ZVAL(zargv);
-					MAKE_STD_ZVAL(zflags);
-					MAKE_STD_ZVAL(zoptions);
-					MAKE_STD_ZVAL(zargs);
+				MAKE_STD_ZVAL(zargv);
+				MAKE_STD_ZVAL(zflags);
+				MAKE_STD_ZVAL(zoptions);
+				MAKE_STD_ZVAL(zargs);
+				
+				array_init(zargv);
+				array_init(zflags);
+				array_init(zoptions);
+				array_init(zargs);
+				
+				add_assoc_zval(zargv, "flags", zflags);
+				add_assoc_zval(zargv, "options", zoptions);
+				add_assoc_zval(zargv, "args", zargs);
+				
+				if (SG(request_info).argc) {
+					char **argv = SG(request_info).argv;
+					int    argc = SG(request_info).argc;
+					int    arg  = 1;
 					
-					array_init(zargv);
-					array_init(zflags);
-					array_init(zoptions);
-					array_init(zargs);
+					add_assoc_string(zargv, "exec", argv[0], strlen(argv[0]));
 					
-					add_assoc_zval(zargv, "flags", zflags);
-					add_assoc_zval(zargv, "options", zoptions);
-					add_assoc_zval(zargv, "args", zargs);
-					
-					if (SG(request_info).argc) {
-						char **argv = SG(request_info).argv;
-						int    argc = SG(request_info).argc;
-						int    arg  = 1;
+					while (arg < argc) {
+						size_t len = strlen(argv[arg]);
 						
-						add_assoc_string(zargv, "exec", argv[0], strlen(argv[0]));
-						
-						while (arg < argc) {
-							size_t len = strlen(argv[arg]);
-							
-							switch (argv[arg][0]) {
-								case '-': switch (argv[arg][1]) {
-									case '-': {
-										if (len > 2) {
-											char *option = strdup(&argv[arg][2]);
-											char *value = strstr(option, "=");
-											
-											if (value) {
-												option[value - option] = 0;
-												value++;
-											} else {
-												if (argc > arg+1) {
-													arg++;
-													value = argv[arg];
-												}
+						switch (argv[arg][0]) {
+							case '-': switch (argv[arg][1]) {
+								case '-': {
+									if (len > 2) {
+										char *option = strdup(&argv[arg][2]);
+										char *value = strstr(option, "=");
+										
+										if (value) {
+											option[value - option] = 0;
+											value++;
+										} else {
+											if (argc > arg+1) {
+												arg++;
+												value = argv[arg];
 											}
-											
-											if (option && value) {
-												add_assoc_string(
-													zoptions, option, value, strlen(value));
-											}
-											
-											free(option);
 										}
-									} break;
-									
-									default: {
-										if (len > 1) {
-											add_next_index_string(
-												zflags, &argv[arg][1], len-1);
+										
+										if (option && value) {
+											add_assoc_string(
+												zoptions, option, value, strlen(value));
 										}
+										
+										free(option);
 									}
 								} break;
 								
 								default: {
-									add_next_index_string(zargs, argv[arg], len);
+									if (len > 1) {
+										add_next_index_string(
+											zflags, &argv[arg][1], len-1);
+									}
 								}
+							} break;
+							
+							default: {
+								add_next_index_string(zargs, argv[arg], len);
 							}
-							arg++;
 						}
+						arg++;
 					}
-					
-					Router_do_route(route, zargv, return_value TSRMLS_CC);
-					
-					zval_ptr_dtor(&zargv);
-					zval_ptr_dtor(&zflags);
-					zval_ptr_dtor(&zoptions);
-					zval_ptr_dtor(&zargs);
-					return;
 				}
+				
+				Router_do_route(router->console, zargv, return_value TSRMLS_CC);
+				
+				zval_ptr_dtor(&zargv);
+				zval_ptr_dtor(&zflags);
+				zval_ptr_dtor(&zoptions);
+				zval_ptr_dtor(&zargs);
+				return;
 			}
 		}
 	}
-
+	
 	zend_throw_exception(RoutingException, "no route found", 0 TSRMLS_CC);
 } /* }}} */
 
@@ -372,7 +437,8 @@ static PHP_METHOD(Router, redirect) {
 static zend_function_entry router_class_methods[] = { /* {{{ */
 	PHP_ME(Router, __construct, Router_no_args, ZEND_ACC_PUBLIC)
 	PHP_ME(Router, addRoute,	Router_addRoute, ZEND_ACC_PUBLIC)
-	PHP_ME(Router, setConsole,	Router_setConsole, ZEND_ACC_PUBLIC)
+	PHP_ME(Router, setConsole,	Router_setCallable, ZEND_ACC_PUBLIC)
+	PHP_ME(Router, setDefault,	Router_setCallable, ZEND_ACC_PUBLIC)
 	PHP_ME(Router, route,		Router_no_args, ZEND_ACC_PUBLIC)
 	PHP_ME(Router, redirect,	Router_redirect, ZEND_ACC_PUBLIC)
 	PHP_FE_END
