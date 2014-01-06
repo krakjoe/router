@@ -39,3 +39,13 @@ abstract Router {
 }
 ?>
 ```
+
+*Note: above is documentation to display API; Router is not an abstract.*
+
+Constants
+=========
+
+For redirection:
+
+  - ROUTER_REDIRECT_TEMP
+  - ROUTER_REDIRECT_PERM
