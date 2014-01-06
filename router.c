@@ -109,7 +109,7 @@ static PHP_METHOD(Router, addRoute) {
 			char *callable_name = NULL;
 
 			if (zend_is_callable(callable, 0, &callable_name TSRMLS_CC)) {
-				route_t route = {0};
+				route_t route = {ROUTER_ROUTE_NORMAL};
 
 				ZVAL_STRINGL(&route.method, Z_STRVAL_P(method), Z_STRLEN_P(method), 1);
 				ZVAL_STRINGL(&route.uri, Z_STRVAL_P(uri), Z_STRLEN_P(uri), 1);
@@ -152,7 +152,7 @@ static PHP_METHOD(Router, setConsole) {
 		char *callable_name = NULL;
 
 		if (zend_is_callable(callable, 0, &callable_name TSRMLS_CC)) {
-			route_t route = {1};
+			route_t route = {ROUTER_ROUTE_CONSOLE};
 
 			route.callable = callable;
 
@@ -193,7 +193,7 @@ static PHP_METHOD(Router, setDefault) {
 		char *callable_name = NULL;
 
 		if (zend_is_callable(callable, 0, &callable_name TSRMLS_CC)) {
-			route_t route = {1};
+			route_t route = {ROUTER_ROUTE_DEFAULT};
 
 			route.callable = callable;
 

@@ -6,14 +6,6 @@ This extension serves to provide a sane, easy router for modern PHP applications
 ```php
 <?php
 abstract Router {
-	
-	/*
-	* @param method   - get/post/put/patch etc
-	* @param uri	  - regexp to match REQUEST_URI
-	* @param callback - the routes callable
-	*/
-	public function addRoute(string method, string uri, Callable callback);
-	
 	/*
 	* The console program is executed whenever appropriate
 	* @param callback - the console program
@@ -25,6 +17,13 @@ abstract Router {
 	* @param callback - the console program
 	*/
 	public function setDefault(Callable callback);
+	
+	/*
+	* @param method   - get/post/put/patch etc
+	* @param uri	  - regexp to match REQUEST_URI
+	* @param callback - the routes callable
+	*/
+	public function addRoute(string method, string uri, Callable callback);
 	
 	/*
 	* Sends a Location: header and finishes the request
