@@ -62,3 +62,45 @@ For redirection:
 
   - ROUTER_REDIRECT_TEMP
   - ROUTER_REDIRECT_PERM
+  
+Hello World
+===========
+
+```php
+<?php
+try {
+	$router = new Router();
+	$router->setDefault(function(){
+		printf("Hello World\n");
+	})
+	->route();
+} catch(RoutingException $ex) {
+	printf(
+		"<pre>Exception: %s\n</pre>", (string)$ex);
+}
+?>
+```
+
+Hello Console & Web
+===================
+
+```php
+<?php
+try {
+	$router = new Router();
+	$router
+		->setDefault(function(){
+			printf("Hello Web User\n");
+		})
+		->setConsole(function(){
+			printf("Hello Console User\n");
+		})
+		->route();
+} catch(RoutingException $ex) {
+	printf(
+		"<pre>Exception: %s\n</pre>", (string)$ex);
+}
+?>
+```
+
+
