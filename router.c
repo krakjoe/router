@@ -77,6 +77,11 @@ ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO_EX(Router_redirect, 0, 0, 1)
 	ZEND_ARG_INFO(0, location)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(Router_reroute, 0, 0, 2)
+	ZEND_ARG_INFO(0, method)
+	ZEND_ARG_INFO(0, uri)
 ZEND_END_ARG_INFO() /* }}} */
 
 #define RETURN_CHAIN() do {\
@@ -257,6 +262,129 @@ static inline void Router_do_route(route_t *route, zval *groups, zval *return_va
 	}
 } /* }}} */
 
+static inline zend_bool Router_call_route(router_t *router, zval *method, zval *uri, zval *return_value TSRMLS_DC) { /* {{{ */
+	zval *zsubs;
+	HashPosition position;
+	route_t *route = NULL;
+	
+	ALLOC_INIT_ZVAL(zsubs);
+	array_init(zsubs);
+
+	for (zend_hash_internal_pointer_reset_ex(&router->routes, &position);
+		zend_hash_get_current_data_ex(&router->routes, (void**) &route, &position) == SUCCESS;
+		zend_hash_move_forward_ex(&router->routes, &position)) {
+		
+		if (route->type)
+			continue;
+		
+		if ((Z_STRLEN_P(method) == Z_STRLEN(route->method)) && 
+			(strncasecmp(Z_STRVAL_P(method), Z_STRVAL(route->method), Z_STRLEN_P(method)) == SUCCESS)) {
+			zval zmatch = {0};
+
+			pcre_cache_entry *pcre = pcre_get_compiled_regex_cache(Z_STRVAL(route->uri), Z_STRLEN(route->uri) TSRMLS_CC);
+
+			if (pcre != NULL) {
+				php_pcre_match_impl(
+					pcre,
+					Z_STRVAL_P(uri), Z_STRLEN_P(uri), 
+					&zmatch, zsubs, 0, 0, 0, 0 TSRMLS_CC);
+
+				if (zend_is_true(&zmatch)) {
+					Router_do_route(route, zsubs, return_value TSRMLS_CC);
+					zval_ptr_dtor(&zsubs);
+					return 1;
+				}
+
+				zend_hash_clean(Z_ARRVAL_P(zsubs));
+			} else {
+				zend_throw_exception(
+					RoutingException, "invalid route found", 0 TSRMLS_CC);
+			}
+		}
+	}
+
+	zval_ptr_dtor(&zsubs);
+	
+	return 0;
+} /* }}} */
+
+static inline void Router_call_console(router_t *router, zval *return_value TSRMLS_DC) { /* {{{ */
+	zval *zargv, *zflags, *zoptions, *zargs;
+
+	MAKE_STD_ZVAL(zargv);
+	MAKE_STD_ZVAL(zflags);
+	MAKE_STD_ZVAL(zoptions);
+	MAKE_STD_ZVAL(zargs);
+
+	array_init(zargv);
+	array_init(zflags);
+	array_init(zoptions);
+	array_init(zargs);
+
+	add_assoc_zval(zargv, "flags", zflags);
+	add_assoc_zval(zargv, "options", zoptions);
+	add_assoc_zval(zargv, "args", zargs);
+
+	if (SG(request_info).argc) {
+		char **argv = SG(request_info).argv;
+		int    argc = SG(request_info).argc;
+		int    arg  = 1;
+
+		add_assoc_string(zargv, "exec", argv[0], strlen(argv[0]));
+
+		while (arg < argc) {
+			size_t len = strlen(argv[arg]);
+
+			switch (argv[arg][0]) {
+				case '-': switch (argv[arg][1]) {
+					case '-': {
+						if (len > 2) {
+							char *option = strdup(&argv[arg][2]);
+							char *value = strstr(option, "=");
+
+							if (value) {
+								option[value - option] = 0;
+								value++;
+							} else {
+								if (argc > arg+1) {
+									arg++;
+									value = argv[arg];
+								}
+							}
+
+							if (option && value) {
+								add_assoc_string(
+									zoptions, option, value, strlen(value));
+							}
+
+							free(option);
+						}
+					} break;
+
+					default: {
+						if (len > 1) {
+							add_next_index_string(
+								zflags, &argv[arg][1], len-1);
+						}
+					}
+				} break;
+
+				default: {
+					add_next_index_string(zargs, argv[arg], len);
+				}
+			}
+			arg++;
+		}
+	}
+
+	Router_do_route(router->console, zargv, return_value TSRMLS_CC);
+
+	zval_ptr_dtor(&zargv);
+	zval_ptr_dtor(&zflags);
+	zval_ptr_dtor(&zoptions);
+	zval_ptr_dtor(&zargs);
+}
+
 /* {{{ proto mixed Router::route(void)
 	returns the result of invoking the first suitable routes handler 
 	Throws RoutingException on failure */
@@ -271,56 +399,20 @@ static PHP_METHOD(Router, route) {
 	router = zend_object_store_get_object(getThis() TSRMLS_CC);
 
 	if (zend_hash_num_elements(&router->routes)) {
-		HashPosition position;
-
 		if (SG(request_info).request_method) {
-			zval *zsubs;
+			zend_bool routed = 0;
+			zval method;
+			zval uri;
 			
-			size_t method_length = strlen(SG(request_info).request_method);
-			char *method = zend_str_tolower_dup(SG(request_info).request_method, method_length);
-
-			char *request_uri = SG(request_info).request_uri;
-			size_t request_uri_length = strlen(request_uri);
+			ZVAL_STRING(&method, SG(request_info).request_method, 0);
+			ZVAL_STRING(&uri, SG(request_info).request_uri, 0);
 			
-			ALLOC_INIT_ZVAL(zsubs);
-			array_init(zsubs);
+			routed = Router_call_route(
+				router, &method, &uri, return_value TSRMLS_CC);
 
-			for (zend_hash_internal_pointer_reset_ex(&router->routes, &position);	
-				zend_hash_get_current_data_ex(&router->routes, (void**) &route, &position) == SUCCESS;
-				zend_hash_move_forward_ex(&router->routes, &position)) {
-				
-				if (route->type)
-					continue;
-				
-				if ((method_length == Z_STRLEN(route->method)) && 
-					(strncasecmp(method, Z_STRVAL(route->method), method_length) == SUCCESS)) {
-					zval zmatch = {0};
-
-					pcre_cache_entry *pcre = pcre_get_compiled_regex_cache(Z_STRVAL(route->uri), Z_STRLEN(route->uri) TSRMLS_CC);
-
-					if (pcre != NULL) {
-						php_pcre_match_impl(
-							pcre,
-							request_uri, request_uri_length, 
-							&zmatch, zsubs, 0, 0, 0, 0 TSRMLS_CC);
-
-						if (zend_is_true(&zmatch)) {
-							Router_do_route(route, zsubs, return_value TSRMLS_CC);
-							zval_ptr_dtor(&zsubs);
-							efree(method);
-							return;
-						}
-
-						zend_hash_clean(Z_ARRVAL_P(zsubs));
-					} else {
-						zend_throw_exception(
-							RoutingException, "invalid route found", 0 TSRMLS_CC);
-					}
-				}
+			if (routed) {
+				return;
 			}
-
-			zval_ptr_dtor(&zsubs);
-			efree(method);
 			
 			if (router->fallback) {
 				Router_do_route(router->fallback, NULL, return_value TSRMLS_CC);
@@ -328,80 +420,7 @@ static PHP_METHOD(Router, route) {
 			}
 		} else {
 			if (router->console) {
-				zval *zargv, *zflags, *zoptions, *zargs;
-					
-				MAKE_STD_ZVAL(zargv);
-				MAKE_STD_ZVAL(zflags);
-				MAKE_STD_ZVAL(zoptions);
-				MAKE_STD_ZVAL(zargs);
-				
-				array_init(zargv);
-				array_init(zflags);
-				array_init(zoptions);
-				array_init(zargs);
-				
-				add_assoc_zval(zargv, "flags", zflags);
-				add_assoc_zval(zargv, "options", zoptions);
-				add_assoc_zval(zargv, "args", zargs);
-				
-				if (SG(request_info).argc) {
-					char **argv = SG(request_info).argv;
-					int    argc = SG(request_info).argc;
-					int    arg  = 1;
-					
-					add_assoc_string(zargv, "exec", argv[0], strlen(argv[0]));
-					
-					while (arg < argc) {
-						size_t len = strlen(argv[arg]);
-						
-						switch (argv[arg][0]) {
-							case '-': switch (argv[arg][1]) {
-								case '-': {
-									if (len > 2) {
-										char *option = strdup(&argv[arg][2]);
-										char *value = strstr(option, "=");
-										
-										if (value) {
-											option[value - option] = 0;
-											value++;
-										} else {
-											if (argc > arg+1) {
-												arg++;
-												value = argv[arg];
-											}
-										}
-										
-										if (option && value) {
-											add_assoc_string(
-												zoptions, option, value, strlen(value));
-										}
-										
-										free(option);
-									}
-								} break;
-								
-								default: {
-									if (len > 1) {
-										add_next_index_string(
-											zflags, &argv[arg][1], len-1);
-									}
-								}
-							} break;
-							
-							default: {
-								add_next_index_string(zargs, argv[arg], len);
-							}
-						}
-						arg++;
-					}
-				}
-				
-				Router_do_route(router->console, zargv, return_value TSRMLS_CC);
-				
-				zval_ptr_dtor(&zargv);
-				zval_ptr_dtor(&zflags);
-				zval_ptr_dtor(&zoptions);
-				zval_ptr_dtor(&zargs);
+				Router_call_console(router, return_value TSRMLS_CC);
 				return;
 			}
 		}
@@ -432,7 +451,31 @@ static PHP_METHOD(Router, redirect) {
 	php_header(TSRMLS_C);
 
 	free(redirect.line);
-}
+} /* }}} */
+
+/* {{{ proto mixed Router::reroute(string method, string uri) 
+	Reroutes the current request to the specified location without redirecting browser */
+static PHP_METHOD(Router, reroute) {
+	zval *method, *uri;
+	router_t *router = NULL;
+	
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "zz", &method, &uri) == FAILURE) {
+		return;
+	}
+	
+	if (Z_TYPE_P(method) != IS_STRING)
+		convert_to_string(method);
+	
+	if (Z_TYPE_P(uri) != IS_STRING)
+		convert_to_string(uri);
+	
+	router = zend_object_store_get_object(getThis() TSRMLS_CC);
+	
+	if (!Router_call_route(router, method, uri, return_value TSRMLS_CC)) {
+		zend_throw_exception(
+			RoutingException, "the request could not be rerouted", 0 TSRMLS_CC);
+	}
+} /* }}} */
 
 static zend_function_entry router_class_methods[] = { /* {{{ */
 	PHP_ME(Router, __construct, Router_no_args, ZEND_ACC_PUBLIC)
@@ -441,14 +484,15 @@ static zend_function_entry router_class_methods[] = { /* {{{ */
 	PHP_ME(Router, setDefault,	Router_setCallable, ZEND_ACC_PUBLIC)
 	PHP_ME(Router, route,		Router_no_args, ZEND_ACC_PUBLIC)
 	PHP_ME(Router, redirect,	Router_redirect, ZEND_ACC_PUBLIC)
+	PHP_ME(Router, reroute,		Router_reroute, ZEND_ACC_PUBLIC)
 	PHP_FE_END
 }; /* }}} */
 
-static void Router_destroy_route(route_t *route) {
+static void Router_destroy_route(route_t *route) { /* {{{ */
 	zval_dtor(&route->method);
 	zval_dtor(&route->uri);
 	zval_ptr_dtor(&route->callable);
-}
+} /* }}} */
 
 static void Router_destroy_object(router_t *router, zend_object_handle handle TSRMLS_DC) { /* {{{ */
 

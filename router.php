@@ -32,6 +32,18 @@ if (extension_loaded("router")) {
 				printf("You were redirected here ...\n");
 				return true;
 			})
+			->addRoute("get", "~^/reroute-me/?([^/]+)?/?~", function($patterns) use (&$router) {
+				@list($uri, $reroute) = $patterns;
+				
+				if ($reroute) {
+					$router->reroute("get", "/{$reroute}");
+				} else $router->reroute("get", "/blog");
+				return true;
+			})
+			->addRoute("get", "~^/reroute-to~", function(){
+				printf("rerouted here ...\n");
+				return true;
+			})
 			->addRoute("get", "~^/blog/?([a-z]+)?/?([a-z\-]+)?~", function($patterns) use (&$router) { 
 				@list($uri, $action, $article) = $patterns;
 				
@@ -50,7 +62,9 @@ if (extension_loaded("router")) {
 			->route();
 	} catch (RoutingException $re) {
 		printf(
-			"Something went wong routing request :(\n");
+			"Fatal Error:\n".
+			"<pre>%s\n</pre>\n", 
+			(string) $re);
 	}
 }
 ?>
