@@ -1,21 +1,16 @@
 --TEST--
-Check for router presence
+Check no route found exception
 --SKIPIF--
-<?php if (!extension_loaded("router")) print "skip"; ?>
+<?php include_once(sprintf("%s/skip-if.inc", __DIR__)) ?>
 --FILE--
 <?php 
-echo "router extension is available";
-/*
-	you can add regression tests for your extension here
-
-  the output of your test code has to be equal to the
-  text in the --EXPECT-- section below for the tests
-  to pass, differences between the output and the
-  expected text are interpreted as failure
-
-	see php5/README.TESTING for further information on
-  writing regression tests
-*/
+$router = new Router();
+$router->route();
 ?>
---EXPECT--
-router extension is available
+--EXPECTF--
+Fatal error: Uncaught exception 'RoutingException' with message 'no route found' in %s:%d
+Stack trace:
+#0 %s(%d): Router->route()
+#1 {main}
+  thrown in %s on line %d
+
