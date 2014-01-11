@@ -110,6 +110,7 @@ try {
 	$router = new Router();
 	$router->setDefault(function(){
 		printf("Hello World\n");
+		return true;
 	})
 	->route();
 } catch(RoutingException $ex) {
@@ -129,9 +130,11 @@ try {
 	$router
 		->setDefault(function(){
 			printf("Hello Web User\n");
+			return true;
 		})
 		->setConsole(function(){
 			printf("Hello Console User\n");
+			return true;
 		})
 		->route();
 } catch(RoutingException $ex) {
