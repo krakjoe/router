@@ -50,7 +50,6 @@ typedef struct _route_t {
 	zval               method;
 	zval			   uri;
 	zval		      *callable;
-	zend_class_entry  *ce;
 } route_t;
 
 typedef struct _router_t {
@@ -203,7 +202,6 @@ static PHP_METHOD(Router, addRoute) {
 			ZVAL_STRINGL(&route.method, Z_STRVAL_P(pmethod), Z_STRLEN_P(pmethod), 1);
 			ZVAL_STRINGL(&route.uri, Z_STRVAL_P(puri), Z_STRLEN_P(puri), 1);
 			Z_ADDREF_P(route.callable);
-			route.ce = ce;
 			zend_hash_next_index_insert(
 				&router->routes, 
 				(void**) &route, sizeof(route_t), NULL);
@@ -223,7 +221,6 @@ static PHP_METHOD(Router, addRoute) {
 			ZVAL_STRINGL(&route.method, request_method, request_method_length, 1);
 			ZVAL_STRINGL(&route.uri, request_uri, request_uri_length, 1);
 			Z_ADDREF_P(route.callable);
-			route.ce = NULL;
 			zend_hash_next_index_insert(
 				&router->routes, 
 				(void**) &route, sizeof(route_t), NULL);
@@ -252,7 +249,6 @@ static PHP_METHOD(Router, setConsole) {
 			route_t route = {ROUTER_ROUTE_CONSOLE};
 
 			route.callable = callable;
-			route.ce = 0;
 			
 			Z_ADDREF_P(route.callable);
 
@@ -294,7 +290,6 @@ static PHP_METHOD(Router, setDefault) {
 			route_t route = {ROUTER_ROUTE_DEFAULT};
 
 			route.callable = callable;
-			route.ce = 0;
 			
 			Z_ADDREF_P(route.callable);
 
@@ -330,7 +325,7 @@ static inline void Router_do_route(route_t *route, zval *groups, zval *return_va
 		ce = Z_OBJCE_P(route->callable);
 	
 	if (ce && instanceof_function(ce, Route TSRMLS_CC)) {
-		if (zend_call_method_with_1_params(&route->callable, route->ce, NULL, "handle", &local_retval_ptr, groups) == NULL || 
+		if (zend_call_method_with_1_params(&route->callable, ce, NULL, "handle", &local_retval_ptr, groups) == NULL || 
 			Z_TYPE_P(local_retval_ptr) == IS_NULL) {
 			zend_throw_exception(
 				RoutingException, "route did not return an appropriate value", 0 TSRMLS_CC);
