@@ -146,26 +146,29 @@ Hello Objects
 
 ```php
 <?php
+class BlogRoute implements Route {
+	/* always return a valid method string */
+	public function getMethod() 		{ return "get"; }
+	/* always return a valid regex pattern string */
+	public function getURI()    		{ return "~/blog/?(.*)?~"; }
+	/* always return a boolean value */
+	public function handle($patterns)	{ return true; }
+}
+
 class DefaultRoute implements Route {
-	public $router;
-	
-	public function __construct(Router $router) {
-		$this->router = $router;
-	}
-	
-	public function getMethod() { return "get"; }
-	public function getURI()    { return "~/(.*)~"; }
-	public function handle($patterns) {
-		var_dump($patterns);
-		
-		return true;
-	}
+	/* always return a valid method string */
+	public function getMethod() 		{ return "get"; }
+	/* always return a valid regex pattern string */
+	public function getURI()    		{ return "~/(.*)~"; }
+	/* always return a boolean value */
+	public function handle($patterns)	{ return true; }
 }
 
 try {
 	$router = new Router();
 	$router
-		->addRoute(new DefaultRoute($router))
+		->addRoute(new BlogRoute())
+		->addRoute(new DefaultRoute())
 		->setRequest("get", "/whatever")
 		->route();
 } catch(RoutingException $ex) {
