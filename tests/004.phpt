@@ -6,8 +6,9 @@ Check routing
 <?php 
 $router = new Router();
 $router
-	->addHandler("get", "~/first/?([^/]+)?/?([^/]+)/?~", function($patterns){
+	->addRoute("get", "~/first/?([^/]+)?/?([^/]+)/?~", function($patterns){
 		var_dump($patterns);
+		return true;
 	})
 	->setRequest("get", "/first/second/third")
 	->route();

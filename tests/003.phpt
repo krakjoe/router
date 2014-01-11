@@ -8,6 +8,7 @@ $router = new Router();
 $router
 	->setDefault(function(){
 		printf("I am the default");
+		return true;
 	})
 	->setRequest("get", "/")
 	->route();

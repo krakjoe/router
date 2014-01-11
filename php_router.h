@@ -25,7 +25,7 @@ extern zend_module_entry router_module_entry;
 #define phpext_router_ptr &router_module_entry
 
 #define PHP_ROUTER_EXTNAME "router"
-#define PHP_ROUTER_VERSION "0.3.0"
+#define PHP_ROUTER_VERSION "0.4.0"
 
 #ifdef PHP_WIN32
 #	define PHP_ROUTER_API __declspec(dllexport)

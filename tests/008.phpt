@@ -5,12 +5,12 @@ Check argument handling (normal)
 --FILE--
 <?php 
 $router = new Router();
-$router->addHandler("get", "/nothing-good", 1);
+$router->addRoute("get", "/nothing-good", 1);
 ?>
 --EXPECTF--
 Fatal error: Uncaught exception 'RoutingException' with message 'handler is not callable' in %s:%d
 Stack trace:
-#0 %s(%d): Router->addHandler('get', '/nothing-good', 1)
+#0 %s(%d): Router->addRoute('get', '/nothing-good', 1)
 #1 {main}
   thrown in %s on line %d
 

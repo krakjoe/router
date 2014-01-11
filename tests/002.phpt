@@ -7,6 +7,7 @@ Check console
 $router = new Router();
 $router->setConsole(function(){
 	printf("I am the console");
+	return true;
 })->route();
 ?>
 --EXPECT--

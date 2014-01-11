@@ -5,7 +5,7 @@ Check argument handling (coerce)
 --FILE--
 <?php 
 $router = new Router();
-$router->addHandler(1, 1, function(){});
+$router->addRoute(1, 1, function(){});
 echo "yay";
 ?>
 --EXPECT--

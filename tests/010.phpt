@@ -7,7 +7,7 @@ Check argument handling (coerce vars)
 $router = new Router();
 $method = 1;
 $uri = 1;
-$router->addHandler($method, $uri, function(){});
+$router->addRoute($method, $uri, function(){});
 var_dump($method);
 var_dump($uri);
 ?>

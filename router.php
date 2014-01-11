@@ -23,16 +23,16 @@ if (extension_loaded("router")) {
 		$router = new Router();
 		$router
 			->setConsole(array("Console", "main"))
-			->addHandler("get", "~^/redirect-me~", function() use (&$router) {
+			->addRoute("get", "~^/redirect-me~", function() use (&$router) {
 				$router->redirect(
 					"/redirect-to", ROUTER_REDIRECT_PERM);
 				return true;
 			})
-			->addHandler("get", "~^/redirect-to~", function(){
+			->addRoute("get", "~^/redirect-to~", function(){
 				printf("You were redirected here ...\n");
 				return true;
 			})
-			->addHandler("get", "~^/reroute-me/?([^/]+)?/?~", function($patterns) use (&$router) {
+			->addRoute("get", "~^/reroute-me/?([^/]+)?/?~", function($patterns) use (&$router) {
 				@list($uri, $reroute) = $patterns;
 				
 				if ($reroute) {
@@ -40,11 +40,11 @@ if (extension_loaded("router")) {
 				} else $router->reroute("get", "/blog");
 				return true;
 			})
-			->addHandler("get", "~^/reroute-to~", function(){
+			->addRoute("get", "~^/reroute-to~", function(){
 				printf("rerouted here ...\n");
 				return true;
 			})
-			->addHandler("get", "~^/blog/?([a-z]+)?/?([a-z\-]+)?~", function($patterns) use (&$router) { 
+			->addRoute("get", "~^/blog/?([a-z]+)?/?([a-z\-]+)?~", function($patterns) use (&$router) { 
 				@list($uri, $action, $article) = $patterns;
 				
 				if ($action) {

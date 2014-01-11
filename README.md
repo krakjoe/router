@@ -1,34 +1,38 @@
 Router
 ======
 
-This extension serves to provide a sane, easy router for modern PHP applications:
-
 ```php
 <?php
-abstract Router {
-	/*
+class Router {
+	/**
 	* The console handler is invoked whenever appropriate
 	* @param handler - the console handler
 	* Throws RoutingException if the handler is not callable
 	*/
 	public function setConsole(Callable handler);
 	
-	/*
+	/**
 	* The default handler is invoked when a web request matches no other handler
 	* @param handler - the default web request handler
 	* Throws RoutingException if the handler is not callable
 	*/
 	public function setDefault(Callable handler);
 	
-	/*
+	/**
 	* @param method   - case insensitive request method
 	* @param uri	  - regexp for request uri
-	* @param handler  - request handler
+	* @param handler  - route handler
 	* Throws RoutingException if the handler is not callable
 	*/
-	public function addHandler(string method, string uri, Callable handler);
+	public function addRoute(string method, string uri, Callable handler);
 	
-	/*
+	/**
+	* @param method   - route
+	* Throws RoutingException upon failure to manipulate the route appropriately
+	*/
+	public function addRoute(Route route);
+	
+	/**
 	* Sets the request, overriding detection on ::route
 	* @param method - method for the request
 	* @param uri    - uri for the request
@@ -36,14 +40,14 @@ abstract Router {
 	*/
 	public function setRequest(string method, string uri);
 	
-	/*
+	/**
 	* Sends a Location: header and finishes the request
 	* @param location - the location uri
 	* @param code     - ROUTER_DIRECT_TEMP or ROUTER_REDIRECT_PERM
 	*/
 	public function redirect(string location [, integer code = ROUTER_REDIRECT_TEMP]);
 	
-	/*
+	/**
 	* Reroutes the current request without redirecting the browser
 	* @param method - target method
 	* @param uri    - target uri
@@ -52,7 +56,7 @@ abstract Router {
 	*/
 	public function reroute(string method, string uri);
 	
-	/*
+	/**
 	* Invoke the most suitable handler for the current request
 	* Throws RoutingException upon failure to find suitable handler
 	*/
@@ -61,7 +65,33 @@ abstract Router {
 ?>
 ```
 
-*Note: above is documentation to display API; Router is not an abstract.*
+Route
+=====
+
+```php
+<?php
+interface Route {
+	/**
+	* Should return get/put/patch/post etc
+	* @return string
+	*/
+	public function getMethod();
+	
+	/**
+	* Should return a valid regex pattern describing request
+	* @return string
+	*/
+	public function getURI();
+	
+	/**
+	* Will be invoked for appropriate requests
+	* @param patterns - groups array
+	* @return boolean
+	*/
+	public function handle($patterns);
+}
+?>
+```
 
 Constants
 =========
@@ -103,6 +133,40 @@ try {
 		->setConsole(function(){
 			printf("Hello Console User\n");
 		})
+		->route();
+} catch(RoutingException $ex) {
+	printf(
+		"<pre>Exception: %s\n</pre>", (string)$ex);
+}
+?>
+```
+
+Hello Objects
+=============
+
+```php
+<?php
+class DefaultRoute implements Route {
+	public $router;
+	
+	public function __construct(Router $router) {
+		$this->router = $router;
+	}
+	
+	public function getMethod() { return "get"; }
+	public function getURI()    { return "~/(.*)~"; }
+	public function handle($patterns) {
+		var_dump($patterns);
+		
+		return true;
+	}
+}
+
+try {
+	$router = new Router();
+	$router
+		->addRoute(new DefaultRoute($router))
+		->setRequest("get", "/whatever")
 		->route();
 } catch(RoutingException $ex) {
 	printf(

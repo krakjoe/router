@@ -30,6 +30,7 @@
 #include "ext/standard/info.h"
 #include "php_router.h"
 #include "zend_exceptions.h"
+#include "zend_interfaces.h"
 
 #define ROUTER_REDIRECT_PERM 301
 #define ROUTER_REDIRECT_TEMP 302
@@ -41,6 +42,7 @@
 #define getRouter() zend_object_store_get_object(getThis() TSRMLS_CC)
 
 zend_class_entry *Router;
+zend_class_entry *Route;
 zend_class_entry *RoutingException;
 
 typedef struct _route_t {
@@ -48,6 +50,7 @@ typedef struct _route_t {
 	zval               method;
 	zval			   uri;
 	zval		      *callable;
+	zend_class_entry  *ce;
 } route_t;
 
 typedef struct _router_t {
@@ -73,7 +76,11 @@ ZEND_BEGIN_ARG_INFO_EX(Router_two_args, 0, 0, 2)
 	ZEND_ARG_INFO(0, uri)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_INFO_EX(Router_addHandler, 0, 0, 3)
+ZEND_BEGIN_ARG_INFO_EX(Router_array_arg, 0, 0, 1)
+	ZEND_ARG_INFO(0, array)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(Router_addRoute, 0, 0, 3)
 	ZEND_ARG_INFO(0, method)
 	ZEND_ARG_INFO(0, uri)
 	ZEND_ARG_INFO(0, callable)
@@ -133,47 +140,95 @@ static PHP_METHOD(Router, setRequest) {
 	RETURN_CHAIN();
 }
 
-/* {{{ proto Router Router::addHandler(string method, string uri, Callable handler) 
+/* {{{ proto Router Router::addRoute(string method, string uri, Callable handler)
+	   proto Router Router::addRoute(Route route)
 	Throws RoutingException on failure */
-static PHP_METHOD(Router, addHandler) {
+static PHP_METHOD(Router, addRoute) {
 	const char *request_method = NULL;
 	size_t request_method_length = 0L;
 	const char *request_uri = NULL;
 	size_t request_uri_length = 0L;
 	zval *callable = NULL;
+	zend_class_entry *ce = NULL;
+	router_t *router = getRouter();
 	
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ssz", 
-			&request_method, &request_method_length, 
-			&request_uri, &request_uri_length, &callable) != SUCCESS) {
-		return;
+	switch (ZEND_NUM_ARGS()) {
+		case 3: if (zend_parse_parameters_ex(ZEND_PARSE_PARAMS_QUIET, ZEND_NUM_ARGS() TSRMLS_CC, "ssz", 
+				&request_method, &request_method_length, 
+				&request_uri, &request_uri_length, &callable) != SUCCESS) {
+			return;
+		} break;
+		
+		case 1: if (zend_parse_parameters_ex(ZEND_PARSE_PARAMS_QUIET, ZEND_NUM_ARGS() TSRMLS_CC, "O", 
+				&callable, ce) != SUCCESS) {
+			return;
+		} break;
+		
+		default:
+			zend_throw_exception(
+				RoutingException, "Router::addRoute expects one or three arguments, please see documentation", 0 TSRMLS_CC);
+			return;
 	}
 
 	{
-		char *callable_name = NULL;
-
-		if (zend_is_callable(callable, 0, &callable_name TSRMLS_CC)) {
-			route_t route = {ROUTER_ROUTE_NORMAL};
-
+		route_t route = {ROUTER_ROUTE_NORMAL};
+		
+		route.callable = callable;
+		
+		if (ZEND_NUM_ARGS() == 1) {
+			zval *pmethod = NULL, 
+				 *puri = NULL;
+			
+			zend_call_method_with_0_params(
+				&callable, ce, NULL, "getMethod", &pmethod);
+			
+			if (Z_TYPE_P(pmethod) != IS_STRING) {
+				zend_throw_exception(
+					RoutingException, "getMethod returned a non-string value", 0 TSRMLS_CC);
+				zval_ptr_dtor(&pmethod);
+				return;
+			}
+			
+			zend_call_method_with_0_params(
+				&callable, ce, NULL, "getURI", &puri);
+				
+			if (Z_TYPE_P(puri) != IS_STRING) {
+				zend_throw_exception(
+					RoutingException, "getURI returned a non-string value", 0 TSRMLS_CC);
+				zval_ptr_dtor(&pmethod);
+				zval_ptr_dtor(&puri);
+				return;
+			}
+			
+			ZVAL_STRINGL(&route.method, Z_STRVAL_P(pmethod), Z_STRLEN_P(pmethod), 1);
+			ZVAL_STRINGL(&route.uri, Z_STRVAL_P(puri), Z_STRLEN_P(puri), 1);
+			Z_ADDREF_P(route.callable);
+			route.ce = ce;
+			zend_hash_next_index_insert(
+				&router->routes, 
+				(void**) &route, sizeof(route_t), NULL);
+			zval_ptr_dtor(&pmethod);
+			zval_ptr_dtor(&puri);
+		} else {
+			char *callable_name = NULL;
+			
+			if (!zend_is_callable(callable, 0, &callable_name TSRMLS_CC)) {
+				zend_throw_exception(
+					RoutingException, "handler is not callable", 0 TSRMLS_CC);
+				if (callable_name)
+					efree(callable_name);
+				return;
+			}
+			
 			ZVAL_STRINGL(&route.method, request_method, request_method_length, 1);
 			ZVAL_STRINGL(&route.uri, request_uri, request_uri_length, 1);
-
-			route.callable = callable;
-
 			Z_ADDREF_P(route.callable);
-			{
-				router_t *router = getRouter();
-
-				zend_hash_next_index_insert(
-					&router->routes, 
-					(void**) &route, sizeof(route_t), NULL);
-			}
-		} else {
-			zend_throw_exception(
-				RoutingException, "handler is not callable", 0 TSRMLS_CC);
-		}
-
-		if (callable_name) {
-			efree(callable_name);
+			route.ce = NULL;
+			zend_hash_next_index_insert(
+				&router->routes, 
+				(void**) &route, sizeof(route_t), NULL);
+			if (callable_name)
+				efree(callable_name);
 		}
 	}
 
@@ -197,7 +252,8 @@ static PHP_METHOD(Router, setConsole) {
 			route_t route = {ROUTER_ROUTE_CONSOLE};
 
 			route.callable = callable;
-
+			route.ce = 0;
+			
 			Z_ADDREF_P(route.callable);
 
 			{
@@ -238,7 +294,8 @@ static PHP_METHOD(Router, setDefault) {
 			route_t route = {ROUTER_ROUTE_DEFAULT};
 
 			route.callable = callable;
-
+			route.ce = 0;
+			
 			Z_ADDREF_P(route.callable);
 
 			{
@@ -263,39 +320,60 @@ static PHP_METHOD(Router, setDefault) {
 } /* }}} */
 
 static inline void Router_do_route(route_t *route, zval *groups, zval *return_value_ptr TSRMLS_DC) { /* {{{ */
-	if (route) {
-		zval *callback_retval_ptr = NULL, *callback_args = NULL;
+	zval *local_retval_ptr = NULL;
+	zend_class_entry *ce = NULL;
+	
+	if (!route)
+		return;
+	
+	if (Z_TYPE_P(route->callable) == IS_OBJECT)
+		ce = Z_OBJCE_P(route->callable);
+	
+	if (ce && instanceof_function(ce, Route TSRMLS_CC)) {
+		if (zend_call_method_with_1_params(&route->callable, route->ce, NULL, "handle", &local_retval_ptr, groups) == NULL || 
+			Z_TYPE_P(local_retval_ptr) == IS_NULL) {
+			zend_throw_exception(
+				RoutingException, "route did not return an appropriate value", 0 TSRMLS_CC);
+			return;
+		}
+		
+		ZVAL_ZVAL(return_value_ptr, local_retval_ptr, 0, 1);
+	} else {
+		zval *callback_args = NULL;
 		zend_fcall_info callback_info;
 		zend_fcall_info_cache callback_cache;
 		char *callback_name, *callback_error;
 
 		if (zend_fcall_info_init(route->callable, 0, &callback_info, &callback_cache, &callback_name, &callback_error TSRMLS_CC) == SUCCESS) {
-			callback_info.retval_ptr_ptr = &callback_retval_ptr;
-
+			callback_info.retval_ptr_ptr = &local_retval_ptr;
 			if (groups) {
 				callback_info.params = (zval***) ecalloc(1, sizeof(zval**));
 				callback_info.params[0] = &groups;
 				callback_info.param_count = 1;
+			} else {
+				callback_info.params = 0;
+				callback_info.param_count = 0;
 			}
 
-			if (zend_call_function(&callback_info, &callback_cache TSRMLS_CC) != SUCCESS) {
+			if ((zend_call_function(&callback_info, &callback_cache TSRMLS_CC) != SUCCESS) || 
+				(local_retval_ptr == NULL || Z_TYPE_P(local_retval_ptr) == IS_NULL)) {
 				zend_throw_exception(
-					RoutingException, "failed to call selected route", 0 TSRMLS_CC);
+					RoutingException, "route did not return an appropriate value", 0 TSRMLS_CC);
+				goto cleanup;
 			}
+		
+			ZVAL_ZVAL(return_value_ptr, local_retval_ptr, 0, 1);
 
-			if (groups) {
+cleanup:
+			if (callback_info.params)
 				efree(callback_info.params);
-			}
-
-			if (callback_retval_ptr) {
-				ZVAL_ZVAL(return_value_ptr, callback_retval_ptr, 0, 1);
-			}
+			if (callback_name)
+				efree(callback_name);
+			if (callback_error)
+				efree(callback_error);
 		}
 
-		if (callback_name)
-			efree(callback_name);
-		if (callback_error)
-			efree(callback_error);
+		
 	}
 } /* }}} */
 
@@ -508,22 +586,22 @@ static PHP_METHOD(Router, redirect) {
 /* {{{ proto mixed Router::reroute(string method, string uri) 
 	Reroutes the current request to the specified location without redirecting browser */
 static PHP_METHOD(Router, reroute) {
-	zval *method, *uri;
-	router_t *router = NULL;
+	char *request_method = NULL;
+	size_t request_method_length = 0L;
+	char *request_uri = NULL;
+	size_t request_uri_length = 0L;
+	zval method, uri;
+	router_t *router = getRouter();
 	
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "zz", &method, &uri) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ss", 
+		&request_method, &request_method_length, &request_uri, &request_uri_length) == FAILURE) {
 		return;
 	}
 	
-	if (Z_TYPE_P(method) != IS_STRING)
-		convert_to_string(method);
+	ZVAL_STRINGL(&method, request_method, request_method_length, 0);
+	ZVAL_STRINGL(&uri, request_uri, request_uri_length, 0);
 	
-	if (Z_TYPE_P(uri) != IS_STRING)
-		convert_to_string(uri);
-	
-	router = getRouter();
-	
-	if (!Router_call_route(router, method, uri, return_value TSRMLS_CC)) {
+	if (!Router_call_route(router, &method, &uri, return_value TSRMLS_CC)) {
 		zend_throw_exception(
 			RoutingException, "the request could not be rerouted", 0 TSRMLS_CC);
 	}
@@ -531,13 +609,20 @@ static PHP_METHOD(Router, reroute) {
 
 static zend_function_entry router_class_methods[] = { /* {{{ */
 	PHP_ME(Router, __construct, Router_no_args, ZEND_ACC_PUBLIC)
-	PHP_ME(Router, addHandler,	Router_addHandler, ZEND_ACC_PUBLIC)
+	PHP_ME(Router, addRoute,	Router_addRoute, ZEND_ACC_PUBLIC)
 	PHP_ME(Router, setRequest,	Router_two_args, ZEND_ACC_PUBLIC)
 	PHP_ME(Router, setConsole,	Router_setCallable, ZEND_ACC_PUBLIC)
 	PHP_ME(Router, setDefault,	Router_setCallable, ZEND_ACC_PUBLIC)
 	PHP_ME(Router, route,		Router_no_args, ZEND_ACC_PUBLIC)
 	PHP_ME(Router, redirect,	Router_redirect, ZEND_ACC_PUBLIC)
 	PHP_ME(Router, reroute,		Router_two_args, ZEND_ACC_PUBLIC)
+	PHP_FE_END
+}; /* }}} */
+
+static zend_function_entry route_interface_methods[] = { /* {{{ */
+	PHP_ABSTRACT_ME(Route, getMethod, Router_no_args)
+	PHP_ABSTRACT_ME(Route, getURI,	  Router_no_args)
+	PHP_ABSTRACT_ME(Route, handle,	  Router_array_arg)
 	PHP_FE_END
 }; /* }}} */
 
@@ -618,6 +703,7 @@ static zend_object_value Router_create_object(zend_class_entry *zce TSRMLS_DC) {
 PHP_MINIT_FUNCTION(router)
 {
 	zend_class_entry Router_entry,
+					 Route_entry,
 					 RoutingException_entry;
 
 	INIT_CLASS_ENTRY(Router_entry, "Router", router_class_methods);
@@ -628,6 +714,11 @@ PHP_MINIT_FUNCTION(router)
 	INIT_CLASS_ENTRY(RoutingException_entry, "RoutingException", NULL);
 	RoutingException = zend_register_internal_class_ex(
 		&RoutingException_entry, zend_exception_get_default(TSRMLS_C), NULL TSRMLS_CC);
+		
+	INIT_CLASS_ENTRY(Route_entry, "Route", route_interface_methods);
+	Route = zend_register_internal_class(
+		&Route_entry TSRMLS_CC);
+	Route->ce_flags |= ZEND_ACC_INTERFACE;
 
 	REGISTER_LONG_CONSTANT("ROUTER_REDIRECT_PERM", ROUTER_REDIRECT_PERM, CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("ROUTER_REDIRECT_TEMP", ROUTER_REDIRECT_TEMP, CONST_CS | CONST_PERSISTENT);

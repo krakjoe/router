@@ -6,11 +6,11 @@ Check rerouting
 <?php 
 $router = new Router();
 $router
-	->addHandler("get", "~/reroute\-me~", function() use (&$router) {
+	->addRoute("get", "~/reroute\-me~", function() use (&$router) {
 		$router->reroute("get", "/reroute-to");
 		return true;
 	})
-	->addHandler("get", "~/reroute\-to~", function() {
+	->addRoute("get", "~/reroute\-to~", function() {
 		printf("rerouted");
 		return true;
 	})
