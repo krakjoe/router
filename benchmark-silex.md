@@ -1,7 +1,7 @@
 Silex Example
 =============
 
-Here's a silex benchmark test, the silex application is a standard bootstrap application, PHP5.7 (master) + Opcache (warm).
+Here's a silex benchmark test, the silex application is a standard bootstrap application apache prefork mpm, PHP5.7 (master) + Opcache (warm).
 
 Standard Silex
 ==============
@@ -47,40 +47,40 @@ Finished 2000 requests
 
 Server Software:        Apache/2.2.23
 Server Hostname:        localhost
-Server Port:            80
+Server Port:            30000
 
 Document Path:          /
 Document Length:        2558 bytes
 
 Concurrency Level:      28
-Time taken for tests:   2.619 seconds
+Time taken for tests:   2.002 seconds
 Complete requests:      2000
 Failed requests:        0
 Write errors:           0
 Total transferred:      5636000 bytes
 HTML transferred:       5116000 bytes
-Requests per second:    763.75 [#/sec] (mean)
-Time per request:       36.661 [ms] (mean)
-Time per request:       1.309 [ms] (mean, across all concurrent requests)
-Transfer rate:          2101.81 [Kbytes/sec] received
+Requests per second:    999.18 [#/sec] (mean)
+Time per request:       28.023 [ms] (mean)
+Time per request:       1.001 [ms] (mean, across all concurrent requests)
+Transfer rate:          2749.68 [Kbytes/sec] received
 
 Connection Times (ms)
               min  mean[+/-sd] median   max
 Connect:        0    0   0.1      0       1
-Processing:     6   36  27.9     29     208
-Waiting:        6   32  26.7     24     207
-Total:          7   36  28.0     29     208
+Processing:     8   28   4.0     27      57
+Waiting:        8   27   3.9     26      44
+Total:          9   28   3.9     27      57
 
 Percentage of the requests served within a certain time (ms)
-  50%     29
-  66%     40
-  75%     50
-  80%     56
-  90%     74
-  95%     88
-  98%    107
-  99%    130
- 100%    208 (longest request)
+  50%     27
+  66%     29
+  75%     30
+  80%     31
+  90%     33
+  95%     35
+  98%     37
+  99%     38
+ 100%     57 (longest request)
 ```
 
 Router Silex
@@ -130,40 +130,40 @@ Finished 2000 requests
 
 Server Software:        Apache/2.2.23
 Server Hostname:        localhost
-Server Port:            80
+Server Port:            30000
 
 Document Path:          /router-silex.php
 Document Length:        2558 bytes
 
 Concurrency Level:      28
-Time taken for tests:   1.643 seconds
+Time taken for tests:   1.270 seconds
 Complete requests:      2000
 Failed requests:        0
 Write errors:           0
 Total transferred:      5506000 bytes
 HTML transferred:       5116000 bytes
-Requests per second:    1217.18 [#/sec] (mean)
-Time per request:       23.004 [ms] (mean)
-Time per request:       0.822 [ms] (mean, across all concurrent requests)
-Transfer rate:          3272.35 [Kbytes/sec] received
+Requests per second:    1574.76 [#/sec] (mean)
+Time per request:       17.780 [ms] (mean)
+Time per request:       0.635 [ms] (mean, across all concurrent requests)
+Transfer rate:          4233.71 [Kbytes/sec] received
 
 Connection Times (ms)
               min  mean[+/-sd] median   max
 Connect:        0    0   0.1      0       1
-Processing:     5   23  15.2     20     113
-Waiting:        5   22  15.0     20     113
-Total:          5   23  15.2     20     113
+Processing:     4   18   2.4     17      30
+Waiting:        4   17   2.3     17      30
+Total:          5   18   2.4     17      30
 
 Percentage of the requests served within a certain time (ms)
-  50%     20
-  66%     24
-  75%     29
-  80%     32
-  90%     44
-  95%     54
-  98%     66
-  99%     76
- 100%    113 (longest request)
+  50%     17
+  66%     18
+  75%     18
+  80%     19
+  90%     21
+  95%     22
+  98%     24
+  99%     26
+ 100%     30 (longest request)
 ```
 
 A nice improvement, but I'd wager *nothing that couldn't be done in userland* ...
