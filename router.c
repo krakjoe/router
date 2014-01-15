@@ -399,7 +399,11 @@ static inline zend_bool Router_call_route(router_t *router, zval *method, zval *
 					Z_STRVAL_P(uri), Z_STRLEN_P(uri), 
 					&zmatch, zsubs, 0, 0, 0, 0 TSRMLS_CC);
 
+#if PHP_VERSION_ID >= 50700
 				if (zend_is_true(&zmatch TSRMLS_CC)) {
+#else
+				if (zend_is_true(&zmatch)) {
+#endif
 					Router_do_route(route, zsubs, return_value TSRMLS_CC);
 					zval_ptr_dtor(&zsubs);
 					return 1;
