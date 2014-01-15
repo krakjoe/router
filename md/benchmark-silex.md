@@ -1,7 +1,7 @@
 Silex Example
 =============
 
-Here's a silex benchmark test, the silex application is a standard bootstrap application apache prefork mpm, PHP5.7 (master) + Opcache (warm).
+Here's a silex benchmark test, the silex application is a standard bootstrap/twig test, apache prefork mpm, PHP5.7 (master) + Opcache (warm).
 
 Standard Silex
 ==============
