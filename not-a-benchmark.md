@@ -1,7 +1,7 @@
 Not a benchmark
 ===============
 
-The following is the output from ApacheBenchmark, serving router.php using worker-mpm apache, PHP5.7 (master) + Opcache.
+The following is the output from ApacheBenchmark, serving router.php using worker-mpm apache, PHP5.7 (master) + Opcache (warm).
 
 ```
 This is ApacheBench, Version 2.3 <$Revision: 1430300 $>
